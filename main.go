@@ -8,8 +8,8 @@ import (
 )
 
 type Profile struct {
-	Name  string
-	Email string
+	Name  string `json:"name" yaml:"name" xml:"name" toml:"name"`
+	Email string `json:"email" yaml:"email" xml:"email" toml:"email"`
 }
 
 func main() {
@@ -24,17 +24,17 @@ func main() {
 	profileCmd.Parse(os.Args[3:])
 
 	if *name == "" {
-		fmt.Println("Erro: A flag --name é obrigatória.")
+		fmt.Fprintln(os.Stderr, "Erro: A flag --name é obrigatória.")
 		profileCmd.Usage()
 		os.Exit(1)
 	}
 	if *email == "" {
-		fmt.Println("Erro: A flag: --email é obrigatória")
+		fmt.Fprintln(os.Stderr, "Erro: A flag: --email é obrigatória")
 		profileCmd.Usage()
 		os.Exit(1)
 	}
 	if !strings.Contains(*email, "@") {
-		fmt.Println("Erro: O email deve conter um @")
+		fmt.Fprintln(os.Stderr, "Erro: O email deve conter um @")
 		profileCmd.Usage()
 		os.Exit(1)
 	}
@@ -42,5 +42,5 @@ func main() {
 	//add new profile with the values of the flags
 	profile := Profile{Name: *name, Email: *email}
 
-	fmt.Printf("Perfil %s de email: %s. Adicionado com sucesso! \n", profile.Name, profile.Email)
+	fmt.Printf("Perfil add -> %+v \n", profile)
 }
