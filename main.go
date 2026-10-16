@@ -1,17 +1,20 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
+	"gitprof-go-cli/internal/clone"
 	"gitprof-go-cli/internal/profile"
 	"gitprof-go-cli/internal/store"
 	"os"
+	"strings"
 )
 
 func main() {
 
 	if len(os.Args) < 3 || os.Args[1] != "profile" {
-		fmt.Println("Uso: gitprof profile <add|listar|ssh> <args>")
+		fmt.Println("Uso: gitprof profile <add|listar|ssh|clone> <args>")
 		os.Exit(1)
 	}
 	var err error
@@ -22,8 +25,10 @@ func main() {
 		err = cmdListar(os.Args[3:])
 	case "ssh":
 		err = cmdConfigSSH(os.Args[3:])
+	case "clone":
+		err = cmdClone(os.Args[3:])
 	default:
-		fmt.Fprintln(os.Stderr, "Uso: gitprof profile <add|listar|ssh> <args>")
+		fmt.Fprintln(os.Stderr, "Uso: gitprof profile <add|listar|ssh|clone> <args>")
 		os.Exit(1)
 	}
 	if err != nil {
@@ -108,5 +113,33 @@ func cmdConfigSSH(args []string) error {
 		return err
 	}
 	fmt.Println("SSH host salvo em", path)
+	return nil
+}
+
+func cmdClone(args []string) error {
+	fs := flag.NewFlagSet("clone", flag.ContinueOnError)
+	rawURL := fs.String("url", "", "url do git")
+	name := fs.String("name", "", "nome do perfil")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	lista, err := store.Load()
+	if err != nil {
+		return err
+	}
+	prof, err := profile.FindProfileByName(*name, lista)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(prof.SSHHost) == "" {
+		return errors.New("perfil sem alias SSH, rode profile ssh")
+	}
+
+	got, err := clone.RewriteURL(*rawURL, prof.SSHHost)
+	if err != nil {
+		return err
+	}
+	fmt.Println(got)
 	return nil
 }

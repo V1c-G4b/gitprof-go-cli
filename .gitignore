@@ -1,3 +1,4 @@
 .idea/
 *.json.bak
 /gitprof
+gitprof-go-cli

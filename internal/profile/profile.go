@@ -62,3 +62,12 @@ func SetSSHHost(host string, pl []Profile, name string) ([]Profile, error) {
 	}
 	return nil, ErrProfileNotFound
 }
+
+func FindProfileByName(name string, pl []Profile) (Profile, error) {
+	for _, p := range pl {
+		if strings.EqualFold(p.Name, name) {
+			return p, nil
+		}
+	}
+	return Profile{}, ErrProfileNotFound
+}
