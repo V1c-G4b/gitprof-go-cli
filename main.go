@@ -11,7 +11,7 @@ import (
 func main() {
 
 	if len(os.Args) < 3 || os.Args[1] != "profile" {
-		fmt.Println("Uso: gitprof profile <add|listar> <args>")
+		fmt.Println("Uso: gitprof profile <add|listar|ssh> <args>")
 		os.Exit(1)
 	}
 	var err error
@@ -20,8 +20,10 @@ func main() {
 		err = cmdAdd(os.Args[3:])
 	case "listar":
 		err = cmdListar(os.Args[3:])
+	case "ssh":
+		err = cmdConfigSSH(os.Args[3:])
 	default:
-		fmt.Fprintln(os.Stderr, "Uso: gitprof profile <add|listar> <args>")
+		fmt.Fprintln(os.Stderr, "Uso: gitprof profile <add|listar|ssh> <args>")
 		os.Exit(1)
 	}
 	if err != nil {
@@ -31,7 +33,6 @@ func main() {
 }
 
 func cmdAdd(args []string) error {
-
 	fs := flag.NewFlagSet("add", flag.ContinueOnError)
 	name := fs.String("name", "", "nome do perfil")
 	email := fs.String("email", "", "email do perfil")
@@ -79,7 +80,33 @@ func cmdListar(args []string) error {
 	}
 
 	for _, p := range lista {
-		fmt.Printf("%-20s %s \n", p.Name, p.Email)
+		fmt.Printf("%-20s %s %s \n", p.Name, p.Email, p.SSHHost)
 	}
+	return nil
+}
+
+func cmdConfigSSH(args []string) error {
+	fs := flag.NewFlagSet("ssh", flag.ContinueOnError)
+	host := fs.String("host", "", "host do ssh")
+	name := fs.String("name", "", "nome do perfil")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	lista, err := store.Load()
+	if err != nil {
+		return err
+	}
+
+	profiles, err := profile.SetSSHHost(*host, lista, *name)
+	if err != nil {
+		return err
+	}
+	path, err := store.Save(profiles)
+	if err != nil {
+		return err
+	}
+	fmt.Println("SSH host salvo em", path)
 	return nil
 }

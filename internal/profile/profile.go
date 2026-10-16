@@ -6,15 +6,18 @@ import (
 )
 
 var (
-	ErrEmptyName    = errors.New("name is empty")
-	ErrEmptyEmail   = errors.New("email is empty")
-	ErrInvalidEmail = errors.New("invalid email")
-	ErrProfileExist = errors.New("profile already exists")
+	ErrEmptyName       = errors.New("name is empty")
+	ErrEmptyEmail      = errors.New("email is empty")
+	ErrInvalidEmail    = errors.New("invalid email")
+	ErrProfileExist    = errors.New("profile already exists")
+	ErrInvalidSSHHost  = errors.New("invalid ssh host")
+	ErrProfileNotFound = errors.New("profile not found")
 )
 
 type Profile struct {
-	Name  string `json:"name"`
-	Email string `json:"email"`
+	Name    string `json:"name"`
+	Email   string `json:"email"`
+	SSHHost string `json:"ssh_host,omitempty"`
 }
 
 func New(name, email string) (Profile, error) {
@@ -45,4 +48,17 @@ func Add(profile Profile, pl []Profile) ([]Profile, error) {
 		}
 	}
 	return append(pl, profile), nil
+}
+
+func SetSSHHost(host string, pl []Profile, name string) ([]Profile, error) {
+	if strings.TrimSpace(host) == "" {
+		return nil, ErrInvalidSSHHost
+	}
+	for i := range pl {
+		if strings.EqualFold(pl[i].Name, name) {
+			pl[i].SSHHost = strings.TrimSpace(host)
+			return pl, nil
+		}
+	}
+	return nil, ErrProfileNotFound
 }
