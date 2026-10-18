@@ -71,3 +71,12 @@ func FindProfileByName(name string, pl []Profile) (Profile, error) {
 	}
 	return Profile{}, ErrProfileNotFound
 }
+
+func FindProfileBySSHHost(host string, pl []Profile) (Profile, error) {
+	for _, p := range pl {
+		if strings.EqualFold(p.SSHHost, host) {
+			return p, nil
+		}
+	}
+	return Profile{}, ErrProfileNotFound
+}

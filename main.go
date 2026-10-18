@@ -130,10 +130,49 @@ func cmdDoctor(args []string) error {
 		return err
 	}
 	if email == "" {
-		fmt.Println("Nenhum email encontrado")
+		return profile.ErrEmptyEmail
+	}
+	lista, err := store.Load()
+	if err != nil {
+		return err
+	}
+
+	if len(lista) == 0 {
+		fmt.Println("Nenhum perfil encontrado")
 		return nil
 	}
-	fmt.Println("Email atual:", email)
+
+	expected, err := doctor.ExpectedRemoteURL(".")
+	if errors.Is(err, doctor.ErrMissingRemote) {
+		fmt.Println("aviso: repo sem remote origin, não sei dizer qual perfil")
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	resto, achou := strings.CutPrefix(expected, "git@")
+	if !achou {
+		fmt.Println("aviso: remote fora do padrão git@host:path.git")
+		return nil
+	}
+	host, _, _ := strings.Cut(resto, ":")
+
+	prof, err := profile.FindProfileBySSHHost(host, lista)
+	if errors.Is(err, profile.ErrProfileNotFound) {
+		fmt.Printf("aviso: nenhum perfil usa o alias %q, não sei dizer qual perfil\n", host)
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	equal := strings.EqualFold(strings.TrimSpace(prof.Email), email)
+	if !equal {
+		fmt.Println("Email não configurado corretamente")
+		return doctor.ErrEmailMismatch
+	}
+	fmt.Println("Email configurado corretamente")
 	return nil
 }
 
