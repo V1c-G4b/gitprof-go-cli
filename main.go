@@ -8,6 +8,7 @@ import (
 	"gitprof-go-cli/internal/profile"
 	"gitprof-go-cli/internal/store"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -142,5 +143,28 @@ func cmdClone(args []string) error {
 	}
 
 	fmt.Println("Clonando", gotURL)
-	return clone.ExecClone(gotURL)
+
+	dir, err := RepoDir(gotURL)
+	if err != nil {
+		return err
+	}
+
+	if err := clone.ExecClone(gotURL, dir); err != nil {
+		return err
+	}
+
+	return clone.SetIdentity(dir, prof.Email)
+
+}
+
+func RepoDir(rawURL string) (string, error) {
+	nome, err := clone.RepoName(rawURL)
+	if err != nil {
+		return "", err
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, "git", nome), nil
 }
