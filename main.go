@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"gitprof-go-cli/internal/clone"
+	"gitprof-go-cli/internal/doctor"
 	"gitprof-go-cli/internal/profile"
 	"gitprof-go-cli/internal/store"
 	"os"
@@ -15,7 +16,7 @@ import (
 func main() {
 
 	if len(os.Args) < 3 || os.Args[1] != "profile" {
-		fmt.Println("Uso: gitprof profile <add|listar|ssh|clone> <args>")
+		fmt.Println("Uso: gitprof profile <add|listar|ssh|clone|doctor> <args>")
 		os.Exit(1)
 	}
 	var err error
@@ -28,8 +29,10 @@ func main() {
 		err = cmdConfigSSH(os.Args[3:])
 	case "clone":
 		err = cmdClone(os.Args[3:])
+	case "doctor":
+		err = cmdDoctor(os.Args[3:])
 	default:
-		fmt.Fprintln(os.Stderr, "Uso: gitprof profile <add|listar|ssh|clone> <args>")
+		fmt.Fprintln(os.Stderr, "Uso: gitprof profile <add|listar|ssh|clone|doctor> <args>")
 		os.Exit(1)
 	}
 	if err != nil {
@@ -114,6 +117,23 @@ func cmdConfigSSH(args []string) error {
 		return err
 	}
 	fmt.Println("SSH host salvo em", path)
+	return nil
+}
+
+func cmdDoctor(args []string) error {
+	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	email, err := doctor.CurrentEmail(".")
+	if err != nil {
+		return err
+	}
+	if email == "" {
+		fmt.Println("Nenhum email encontrado")
+		return nil
+	}
+	fmt.Println("Email atual:", email)
 	return nil
 }
 
