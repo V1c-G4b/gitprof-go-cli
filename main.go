@@ -136,10 +136,11 @@ func cmdClone(args []string) error {
 		return errors.New("perfil sem alias SSH, rode profile ssh")
 	}
 
-	got, err := clone.RewriteURL(*rawURL, prof.SSHHost)
+	gotURL, err := clone.RewriteURL(*rawURL, prof.SSHHost)
 	if err != nil {
 		return err
 	}
-	fmt.Println(got)
-	return nil
+
+	fmt.Println("Clonando", gotURL)
+	return clone.ExecClone(gotURL)
 }

@@ -2,6 +2,8 @@ package clone
 
 import (
 	"errors"
+	"os"
+	"os/exec"
 	"strings"
 )
 
@@ -20,4 +22,13 @@ func RewriteURL(rawURL string, alias string) (string, error) {
 		return "git@" + alias + ":" + path, nil
 	}
 	return "", ErrInvalidURL
+}
+
+func ExecClone(rawURL string) error {
+	cmd := exec.Command("git", "clone", rawURL)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	if err := cmd.Run(); err != nil {
+		return err
+	}
+	return nil
 }
