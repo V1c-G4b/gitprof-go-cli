@@ -1,0 +1,24 @@
+#!/bin/sh
+# gitprof: roda o doctor antes de cada commit e bloqueia se o email do repo
+# não bate com o perfil do alias SSH do origin.
+# Pular uma vez: git commit --no-verify
+# Desligar:      git config --global --unset core.hooksPath
+
+# Fallback para ~/.local/bin porque apps de interface (ex.: GoLand) podem rodar sem o PATH do terminal.
+gitprof_bin=$(command -v gitprof 2>/dev/null || echo "$HOME/.local/bin/gitprof")
+if [ -x "$gitprof_bin" ]; then
+  if ! "$gitprof_bin" profile doctor; then
+    echo "gitprof: commit bloqueado. Ajuste o user.email do repo ou use --no-verify." >&2
+    exit 1
+  fi
+else
+  echo "gitprof: binário não encontrado, pulando o doctor." >&2
+fi
+
+# core.hooksPath global substitui o .git/hooks do repo; então encadeamos o hook
+# local, se existir e não for este mesmo arquivo.
+local_hook="$(git rev-parse --git-dir)/hooks/pre-commit"
+if [ -x "$local_hook" ] && ! [ "$local_hook" -ef "$0" ]; then
+  exec "$local_hook" "$@"
+fi
+exit 0
