@@ -9,7 +9,8 @@ var (
 	ErrEmptyName       = errors.New("name is empty")
 	ErrEmptyEmail      = errors.New("email is empty")
 	ErrInvalidEmail    = errors.New("invalid email")
-	ErrProfileExist    = errors.New("profile already exists")
+	ErrNameExists      = errors.New("profile name already exists")
+	ErrEmailExists     = errors.New("profile email already exists")
 	ErrInvalidSSHHost  = errors.New("invalid ssh host")
 	ErrProfileNotFound = errors.New("profile not found")
 )
@@ -43,8 +44,11 @@ func (p Profile) Validate() error {
 
 func Add(profile Profile, pl []Profile) ([]Profile, error) {
 	for _, p := range pl {
-		if strings.ToUpper(p.Email) == strings.ToUpper(profile.Email) || strings.ToUpper(p.Name) == strings.ToUpper(profile.Name) {
-			return nil, ErrProfileExist
+		if strings.EqualFold(p.Name, profile.Name) {
+			return nil, ErrNameExists
+		}
+		if strings.EqualFold(p.Email, profile.Email) {
+			return nil, ErrEmailExists
 		}
 	}
 	return append(pl, profile), nil

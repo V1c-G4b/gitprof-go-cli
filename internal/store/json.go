@@ -14,31 +14,29 @@ func pathConfig() (string, error) {
 	base, err := os.UserConfigDir()
 
 	if err != nil {
-		return "", fmt.Errorf("Erro ao buscar config: %w", err)
+		return "", fmt.Errorf("buscar diretório de config: %w", err)
 	}
 
 	return filepath.Join(base, "gitprof", "profiles.json"), nil
 }
 
 func Save(profiles []profile.Profile) (string, error) {
-	osConfig, err := os.UserConfigDir()
+	path, err := pathConfig()
 	if err != nil {
-		return "", fmt.Errorf("Erro ao buscar config:%w", err)
+		return "", err
 	}
 
 	indent, err := json.MarshalIndent(profiles, "", "  ")
 	if err != nil {
-		return "", fmt.Errorf("Erro ao gerar o JSON:%w", err)
+		return "", fmt.Errorf("gerar json: %w", err)
 	}
 
-	dir := filepath.Join(osConfig, "gitprof")
-	if err := os.MkdirAll(dir, 0700); err != nil {
-		return "", fmt.Errorf("Erro ao criar pasta:%w", err)
+	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
+		return "", fmt.Errorf("criar pasta de config: %w", err)
 	}
 
-	path := filepath.Join(dir, "profiles.json")
 	if err := os.WriteFile(path, indent, 0600); err != nil {
-		return "", fmt.Errorf("Erro ao salvar o arquivo:%w", err)
+		return "", fmt.Errorf("salvar %s: %w", path, err)
 	}
 	return path, nil
 }

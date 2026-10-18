@@ -55,7 +55,7 @@ Host github-trabalho
 ### 3. Listar
 
 ```bash
-gitprof profile listar
+gitprof profile list
 ```
 
 ### 4. Clonar com o perfil certo

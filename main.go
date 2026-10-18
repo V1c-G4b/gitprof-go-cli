@@ -16,15 +16,15 @@ import (
 func main() {
 
 	if len(os.Args) < 3 || os.Args[1] != "profile" {
-		fmt.Println("Uso: gitprof profile <add|listar|ssh|clone|doctor> <args>")
+		usage()
 		os.Exit(1)
 	}
 	var err error
 	switch os.Args[2] {
 	case "add":
 		err = cmdAdd(os.Args[3:])
-	case "listar":
-		err = cmdListar(os.Args[3:])
+	case "list":
+		err = cmdList(os.Args[3:])
 	case "ssh":
 		err = cmdConfigSSH(os.Args[3:])
 	case "clone":
@@ -32,13 +32,17 @@ func main() {
 	case "doctor":
 		err = cmdDoctor(os.Args[3:])
 	default:
-		fmt.Fprintln(os.Stderr, "Uso: gitprof profile <add|listar|ssh|clone|doctor> <args>")
+		usage()
 		os.Exit(1)
 	}
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Erro:", err)
 		os.Exit(1)
 	}
+}
+
+func usage() {
+	fmt.Fprintln(os.Stderr, "uso: gitprof profile <add|list|ssh|clone|doctor> <args>")
 }
 
 func cmdAdd(args []string) error {
@@ -51,7 +55,6 @@ func cmdAdd(args []string) error {
 
 	p, err := profile.New(*name, *email)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
 		fs.Usage()
 		return err
 	}
@@ -72,8 +75,8 @@ func cmdAdd(args []string) error {
 	return nil
 }
 
-func cmdListar(args []string) error {
-	fs := flag.NewFlagSet("listar", flag.ContinueOnError)
+func cmdList(args []string) error {
+	fs := flag.NewFlagSet("list", flag.ContinueOnError)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
