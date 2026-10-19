@@ -36,9 +36,32 @@ func main() {
 		os.Exit(1)
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Erro:", err)
-		os.Exit(1)
+		os.Exit(fail(os.Args[2], err))
 	}
+}
+
+// Códigos de saída do doctor. Viraram contrato com o hook pre-commit, que
+// roda em todos os repos: só exitMismatch bloqueia o commit.
+const (
+	exitMismatch = 1 // email do repo não bate com o perfil do alias
+	exitInternal = 2 // falha da própria ferramenta; o hook avisa e deixa passar
+)
+
+// fail imprime o erro (uma vez só, aqui no main) e decide o código de saída.
+// No doctor, tudo que não é mismatch confirmado é falha interna. Os outros
+// comandos continuam saindo com 1.
+func fail(cmd string, err error) int {
+	if cmd == "doctor" && !errors.Is(err, doctor.ErrEmailMismatch) {
+		fmt.Fprintln(os.Stderr, "aviso: falha interna do doctor:", err)
+		return exitInternal
+	}
+	fmt.Fprintln(os.Stderr, "erro:", err)
+	return 1 // no doctor, 1 é sempre exitMismatch
+}
+
+// warn mostra um aviso no stderr. Aviso não bloqueia: o doctor sai com 0.
+func warn(format string, a ...any) {
+	fmt.Fprintln(os.Stderr, "aviso:", fmt.Sprintf(format, a...))
 }
 
 func usage() {
@@ -130,10 +153,11 @@ func cmdDoctor(args []string) error {
 	}
 	email, err := doctor.CurrentEmail(".")
 	if err != nil {
-		return err
+		return fmt.Errorf("ler user.email: %w", err)
 	}
 	if email == "" {
-		return profile.ErrEmptyEmail
+		warn("repo sem user.email, não sei conferir a identidade")
+		return nil
 	}
 	lista, err := store.Load()
 	if err != nil {
@@ -141,39 +165,36 @@ func cmdDoctor(args []string) error {
 	}
 
 	if len(lista) == 0 {
-		fmt.Println("Nenhum perfil encontrado")
+		warn("nenhum perfil cadastrado, rode gitprof profile add")
 		return nil
 	}
 
-	expected, err := doctor.ExpectedRemoteURL(".")
+	remote, err := doctor.ExpectedRemoteURL(".")
 	if errors.Is(err, doctor.ErrMissingRemote) {
-		fmt.Println("aviso: repo sem remote origin, não sei dizer qual perfil")
+		warn("repo sem remote origin, não sei dizer qual perfil")
 		return nil
 	}
 	if err != nil {
-		return err
+		return fmt.Errorf("ler remote origin: %w", err)
 	}
 
-	resto, achou := strings.CutPrefix(expected, "git@")
-	if !achou {
-		fmt.Println("aviso: remote fora do padrão git@host:path.git")
+	host, ok := doctor.HostFromRemote(remote)
+	if !ok {
+		warn("remote origin não é SSH (ex.: HTTPS), não sei dizer qual perfil")
 		return nil
 	}
-	host, _, _ := strings.Cut(resto, ":")
 
 	prof, err := profile.FindProfileBySSHHost(host, lista)
 	if errors.Is(err, profile.ErrProfileNotFound) {
-		fmt.Printf("aviso: nenhum perfil usa o alias %q, não sei dizer qual perfil\n", host)
+		warn("nenhum perfil usa o alias %q, não sei dizer qual perfil", host)
 		return nil
 	}
 	if err != nil {
 		return err
 	}
 
-	equal := strings.EqualFold(strings.TrimSpace(prof.Email), email)
-	if !equal {
-		fmt.Println("Email não configurado corretamente")
-		return doctor.ErrEmailMismatch
+	if err := doctor.CheckEmail(prof.Name, prof.Email, email); err != nil {
+		return err
 	}
 	fmt.Println("Email configurado corretamente")
 	return nil

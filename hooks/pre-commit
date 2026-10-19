@@ -1,16 +1,26 @@
 #!/bin/sh
 # gitprof: roda o doctor antes de cada commit e bloqueia se o email do repo
 # não bate com o perfil do alias SSH do origin.
+# Códigos do doctor: 0 = ok ou aviso, 1 = mismatch (bloqueia),
+# 2 = falha interna do doctor (avisa e deixa o commit passar).
 # Pular uma vez: git commit --no-verify
 # Desligar:      git config --global --unset core.hooksPath
 
 # Fallback para ~/.local/bin porque apps de interface (ex.: GoLand) podem rodar sem o PATH do terminal.
 gitprof_bin=$(command -v gitprof 2>/dev/null || echo "$HOME/.local/bin/gitprof")
 if [ -x "$gitprof_bin" ]; then
-  if ! "$gitprof_bin" profile doctor; then
-    echo "gitprof: commit bloqueado. Ajuste o user.email do repo ou use --no-verify." >&2
-    exit 1
-  fi
+  "$gitprof_bin" profile doctor
+  rc=$?
+  case $rc in
+    0) ;;
+    1)
+      echo "gitprof: commit bloqueado. Ajuste o user.email do repo ou use --no-verify." >&2
+      exit 1
+      ;;
+    *)
+      echo "gitprof: o doctor falhou (código $rc), deixando o commit passar." >&2
+      ;;
+  esac
 else
   echo "gitprof: binário não encontrado, pulando o doctor." >&2
 fi

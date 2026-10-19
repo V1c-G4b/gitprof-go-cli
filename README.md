@@ -81,13 +81,17 @@ gitprof profile doctor
 | Situação | Saída | Código |
 |---|---|---|
 | Email bate com o perfil do alias | `Email configurado corretamente` | 0 |
-| Email não bate | `Email não configurado corretamente` | 1 |
-| Remote HTTPS (fora do padrão `git@host:path`) | aviso | 0 |
+| Remote HTTPS (ou outro que não seja SSH) | aviso | 0 |
 | Repo sem `origin` | aviso | 0 |
 | Nenhum perfil usa o alias do `origin` | aviso | 0 |
-| Repo sem `user.email` | erro | 1 |
+| Nenhum perfil cadastrado | aviso | 0 |
+| Repo sem `user.email` | aviso | 0 |
+| Email não bate | erro com o perfil, o email esperado e o atual | **1** |
+| Falha interna (`profiles.json` ilegível, erro do git...) | aviso de falha interna | 2 |
 
-Os avisos saem com 0 de propósito: quando o doctor não consegue dizer qual é o perfil certo, ele não bloqueia. Só bloqueia quando tem certeza de que está errado.
+O host vem do `origin` nos formatos `git@host:path`, `user@host:path` e `ssh://[user@]host[:porta]/path`; o host pode ser um alias do `~/.ssh/config`.
+
+Os códigos são um contrato com o hook: **só o 1 bloqueia o commit**. Quando o doctor não consegue dizer qual é o perfil certo (avisos, 0) ou quando ele mesmo falha (2), não bloqueia. Só bloqueia quando tem certeza de que está errado. Avisos e erros saem no stderr.
 
 ## Hook pre-commit
 
@@ -106,6 +110,8 @@ Se você **já tem** um `core.hooksPath` global (`git config --global --get core
 
 ### Comportamento
 
+- Doctor com código 1 (email errado): o commit é bloqueado.
+- Doctor com código 2 (falha interna) ou outro código: o hook avisa e deixa o commit passar.
 - Sem o binário no `PATH`, o hook tenta `~/.local/bin/gitprof` (IDEs como o GoLand podem rodar sem o `PATH` do terminal). Se não achar, avisa e deixa o commit passar.
 - `core.hooksPath` global substitui o `.git/hooks` de todos os repos; por isso o hook encadeia o hook local (husky e afins continuam funcionando).
 
@@ -143,6 +149,6 @@ main.go             comandos da CLI
 internal/profile    modelo e regras dos perfis
 internal/store      leitura e gravação do profiles.json
 internal/clone      reescrita de URL, clone e identidade
-internal/doctor     leitura do email e do origin do repo
+internal/doctor     email e origin do repo, host do remote e comparação
 hooks/pre-commit    hook que chama o doctor
 ```
