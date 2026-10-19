@@ -6,11 +6,11 @@ O problema que ele resolve: com mais de uma conta no GitHub, é fácil clonar um
 
 ## Como funciona
 
-Cada perfil tem um **nome**, um **email** e um **alias SSH** (um `Host` do seu `~/.ssh/config`). O alias é o que liga o repo ao perfil:
+Cada perfil tem um **nome**, um **email** e, opcionalmente, um **alias SSH** (um `Host` do seu `~/.ssh/config`) e uma **pasta** (onde ficam os repos daquele perfil). O alias e a pasta são o que ligam o repo ao perfil:
 
 1. `profile clone` reescreve a URL para usar o alias do perfil e já grava o `user.email` do repo.
-2. `profile doctor` lê o host do `origin`, descobre o perfil dono desse alias e compara com o `user.email` do repo.
-3. O hook `pre-commit` roda o doctor sozinho e bloqueia o commit se o email não bater.
+2. `profile doctor` descobre o perfil pela pasta do repo e pelo host do `origin`, confere se os dois concordam e compara com o `user.email` do repo.
+3. O hook `pre-commit` roda o doctor sozinho e bloqueia o commit se o perfil ou o email não baterem.
 
 ## Instalação
 
@@ -52,13 +52,21 @@ Host github-trabalho
   IdentitiesOnly yes
 ```
 
-### 3. Listar
+### 3. Associar uma pasta (opcional)
+
+```bash
+gitprof profile dir -name trabalho -dir ~/dev/work
+```
+
+Todo repo dentro de `~/dev/work` passa a ser do perfil `trabalho`. O `~` é expandido e o caminho é gravado absoluto e limpo (sem `/` no fim, sem `..`). Um caminho relativo é resolvido a partir da pasta atual.
+
+### 4. Listar
 
 ```bash
 gitprof profile list
 ```
 
-### 4. Clonar com o perfil certo
+### 5. Clonar com o perfil certo
 
 ```bash
 gitprof profile clone -name trabalho -url https://github.com/empresa/projeto.git
@@ -70,7 +78,7 @@ Aceita `git@github.com:...`, `https://github.com/...` e `http://github.com/...`.
 - o repo é clonado em `~/git/projeto`;
 - o `user.email` local do repo recebe o email do perfil.
 
-### 5. Conferir um repo
+### 6. Conferir um repo
 
 Dentro do repo:
 
@@ -78,14 +86,28 @@ Dentro do repo:
 gitprof profile doctor
 ```
 
+O doctor procura o perfil de dois jeitos:
+
+- **pela pasta**: a raiz do repo (`git rev-parse --show-toplevel`) precisa estar dentro do `dir` de um perfil. Se mais de um perfil casar, ganha a pasta mais específica (o prefixo mais longo). A comparação respeita o separador de caminho, então `~/dev/work2` não casa com `~/dev/work`. Links simbólicos são resolvidos dos dois lados;
+- **pelo alias**: o host do `origin` precisa ser o `ssh_host` de um perfil.
+
+| Pasta | Alias | Perfil usado |
+|---|---|---|
+| perfil A | perfil A | A |
+| perfil A | perfil B | nenhum: **conflito, código 1** |
+| perfil A | nada | A |
+| nada | perfil B | B |
+| nada | nada | nenhum: aviso, código 0 |
+
+Com o perfil escolhido, o doctor compara o email dele com o `user.email` do repo.
+
 | Situação | Saída | Código |
 |---|---|---|
-| Email bate com o perfil do alias | `Email configurado corretamente` | 0 |
-| Remote HTTPS (ou outro que não seja SSH) | aviso | 0 |
-| Repo sem `origin` | aviso | 0 |
-| Nenhum perfil usa o alias do `origin` | aviso | 0 |
+| Email bate com o perfil | `Email configurado corretamente` | 0 |
+| Nem a pasta nem o alias indicam um perfil (remote HTTPS, sem `origin`, alias desconhecido...) | aviso | 0 |
 | Nenhum perfil cadastrado | aviso | 0 |
 | Repo sem `user.email` | aviso | 0 |
+| A pasta e o alias apontam para perfis diferentes | erro com os dois perfis, a pasta e o alias | **1** |
 | Email não bate | erro com o perfil, o email esperado e o atual | **1** |
 | Falha interna (`profiles.json` ilegível, erro do git...) | aviso de falha interna | 2 |
 
@@ -110,7 +132,7 @@ Se você **já tem** um `core.hooksPath` global (`git config --global --get core
 
 ### Comportamento
 
-- Doctor com código 1 (email errado): o commit é bloqueado.
+- Doctor com código 1 (email errado ou pasta e alias de perfis diferentes): o commit é bloqueado.
 - Doctor com código 2 (falha interna) ou outro código: o hook avisa e deixa o commit passar.
 - Sem o binário no `PATH`, o hook tenta `~/.local/bin/gitprof` (IDEs como o GoLand podem rodar sem o `PATH` do terminal). Se não achar, avisa e deixa o commit passar.
 - `core.hooksPath` global substitui o `.git/hooks` de todos os repos; por isso o hook encadeia o hook local (husky e afins continuam funcionando).

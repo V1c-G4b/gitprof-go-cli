@@ -27,6 +27,8 @@ func main() {
 		err = cmdList(os.Args[3:])
 	case "ssh":
 		err = cmdConfigSSH(os.Args[3:])
+	case "dir":
+		err = cmdDir(os.Args[3:])
 	case "clone":
 		err = cmdClone(os.Args[3:])
 	case "doctor":
@@ -46,7 +48,7 @@ const (
 )
 
 func fail(cmd string, err error) int {
-	if cmd == "doctor" && !errors.Is(err, doctor.ErrEmailMismatch) {
+	if cmd == "doctor" && !doctor.IsMismatch(err) {
 		fmt.Fprintln(os.Stderr, "aviso: falha interna do doctor:", err)
 		return exitInternal
 	}
@@ -59,7 +61,7 @@ func warn(format string, a ...any) {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "uso: gitprof profile <add|list|ssh|clone|doctor> <args>")
+	fmt.Fprintln(os.Stderr, "uso: gitprof profile <add|list|ssh|dir|clone|doctor> <args>")
 }
 
 func cmdAdd(args []string) error {
@@ -109,7 +111,7 @@ func cmdList(args []string) error {
 	}
 
 	for _, p := range lista {
-		fmt.Printf("%-20s %s %s \n", p.Name, p.Email, p.SSHHost)
+		fmt.Printf("%-20s %s %s %s\n", p.Name, p.Email, p.SSHHost, p.Dir)
 	}
 	return nil
 }
@@ -140,6 +142,40 @@ func cmdConfigSSH(args []string) error {
 	return nil
 }
 
+func cmdDir(args []string) error {
+	fs := flag.NewFlagSet("dir", flag.ContinueOnError)
+	name := fs.String("name", "", "nome do perfil")
+	dir := fs.String("dir", "", "pasta dos repos do perfil")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	abs, err := profile.ExpandPath(*dir, home)
+	if err != nil {
+		return fmt.Errorf("pasta %q: %w", *dir, err)
+	}
+
+	lista, err := store.Load()
+	if err != nil {
+		return err
+	}
+	profiles, err := profile.SetDir(abs, lista, *name)
+	if err != nil {
+		return err
+	}
+	path, err := store.Save(profiles)
+	if err != nil {
+		return err
+	}
+	fmt.Println("Pasta", abs, "salva em", path)
+	return nil
+}
+
 func cmdDoctor(args []string) error {
 	fs := flag.NewFlagSet("doctor", flag.ContinueOnError)
 	if err := fs.Parse(args); err != nil {
@@ -163,28 +199,22 @@ func cmdDoctor(args []string) error {
 		return nil
 	}
 
-	remote, err := doctor.ExpectedRemoteURL(".")
-	if errors.Is(err, doctor.ErrMissingRemote) {
-		warn("repo sem remote origin, não sei dizer qual perfil")
-		return nil
-	}
-	if err != nil {
-		return fmt.Errorf("ler remote origin: %w", err)
-	}
-
-	host, ok := doctor.HostFromRemote(remote)
-	if !ok {
-		warn("remote origin não é SSH (ex.: HTTPS), não sei dizer qual perfil")
-		return nil
-	}
-
-	prof, err := profile.FindProfileBySSHHost(host, lista)
-	if errors.Is(err, profile.ErrProfileNotFound) {
-		warn("nenhum perfil usa o alias %q, não sei dizer qual perfil", host)
-		return nil
-	}
+	byDir, err := matchByDir(lista)
 	if err != nil {
 		return err
+	}
+	byHost, host, hostInfo, err := matchByHost(lista)
+	if err != nil {
+		return err
+	}
+
+	prof, ok, err := doctor.Decide(byDir, byHost, host)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		warn("a pasta do repo não pertence a nenhum perfil e %s, não sei dizer qual perfil", hostInfo)
+		return nil
 	}
 
 	if err := doctor.CheckEmail(prof.Name, prof.Email, email); err != nil {
@@ -192,6 +222,64 @@ func cmdDoctor(args []string) error {
 	}
 	fmt.Println("Email configurado corretamente")
 	return nil
+}
+
+func matchByDir(lista []profile.Profile) (doctor.Match, error) {
+	top, err := doctor.Toplevel(".")
+	if err != nil {
+		return doctor.Match{}, fmt.Errorf("achar a raiz do repo: %w", err)
+	}
+	top = realPath(top)
+	resolved := make([]profile.Profile, len(lista))
+	for i, p := range lista {
+		resolved[i] = p
+		if p.Dir != "" {
+			resolved[i].Dir = realPath(p.Dir)
+		}
+	}
+	p, err := profile.FindProfileByDir(top, resolved)
+	if errors.Is(err, profile.ErrProfileNotFound) {
+		return doctor.Match{}, nil
+	}
+	if err != nil {
+		return doctor.Match{}, err
+	}
+	orig, err := profile.FindProfileByName(p.Name, lista)
+	if err != nil {
+		return doctor.Match{}, err
+	}
+	return doctor.Match{Profile: orig, Found: true}, nil
+}
+
+func matchByHost(lista []profile.Profile) (doctor.Match, string, string, error) {
+	remote, err := doctor.ExpectedRemoteURL(".")
+	if errors.Is(err, doctor.ErrMissingRemote) {
+		return doctor.Match{}, "", "o repo não tem remote origin", nil
+	}
+	if err != nil {
+		return doctor.Match{}, "", "", fmt.Errorf("ler remote origin: %w", err)
+	}
+
+	host, ok := doctor.HostFromRemote(remote)
+	if !ok {
+		return doctor.Match{}, "", "o origin não é SSH (ex.: HTTPS)", nil
+	}
+
+	p, err := profile.FindProfileBySSHHost(host, lista)
+	if errors.Is(err, profile.ErrProfileNotFound) {
+		return doctor.Match{}, host, fmt.Sprintf("nenhum perfil usa o alias %q", host), nil
+	}
+	if err != nil {
+		return doctor.Match{}, "", "", err
+	}
+	return doctor.Match{Profile: p, Found: true}, host, "", nil
+}
+
+func realPath(p string) string {
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+	return filepath.Clean(p)
 }
 
 func cmdClone(args []string) error {

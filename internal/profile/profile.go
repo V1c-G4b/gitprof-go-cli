@@ -2,6 +2,8 @@ package profile
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -13,12 +15,14 @@ var (
 	ErrEmailExists     = errors.New("profile email already exists")
 	ErrInvalidSSHHost  = errors.New("invalid ssh host")
 	ErrProfileNotFound = errors.New("profile not found")
+	ErrInvalidDir      = errors.New("invalid dir")
 )
 
 type Profile struct {
 	Name    string `json:"name"`
 	Email   string `json:"email"`
 	SSHHost string `json:"ssh_host,omitempty"`
+	Dir     string `json:"dir,omitempty"`
 }
 
 func New(name, email string) (Profile, error) {
@@ -83,4 +87,67 @@ func FindProfileBySSHHost(host string, pl []Profile) (Profile, error) {
 		}
 	}
 	return Profile{}, ErrProfileNotFound
+}
+
+func ExpandPath(raw, home string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", ErrInvalidDir
+	}
+	if raw == "~" {
+		raw = home
+	} else if rest, ok := strings.CutPrefix(raw, "~/"); ok {
+		raw = filepath.Join(home, rest)
+	} else if strings.HasPrefix(raw, "~") {
+		return "", ErrInvalidDir
+	}
+	abs, err := filepath.Abs(raw)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Clean(abs), nil
+}
+
+func SetDir(dir string, pl []Profile, name string) ([]Profile, error) {
+	if strings.TrimSpace(dir) == "" || !filepath.IsAbs(dir) {
+		return nil, ErrInvalidDir
+	}
+	for i := range pl {
+		if strings.EqualFold(pl[i].Name, name) {
+			pl[i].Dir = filepath.Clean(dir)
+			return pl, nil
+		}
+	}
+	return nil, ErrProfileNotFound
+}
+
+func IsWithin(path, dir string) bool {
+	if path == "" || dir == "" {
+		return false
+	}
+	path = filepath.Clean(path)
+	dir = filepath.Clean(dir)
+	if path == dir {
+		return true
+	}
+	if !strings.HasSuffix(dir, string(os.PathSeparator)) {
+		dir += string(os.PathSeparator)
+	}
+	return strings.HasPrefix(path, dir)
+}
+
+func FindProfileByDir(path string, pl []Profile) (Profile, error) {
+	best := -1
+	for i, p := range pl {
+		if !IsWithin(path, p.Dir) {
+			continue
+		}
+		if best < 0 || len(filepath.Clean(p.Dir)) > len(filepath.Clean(pl[best].Dir)) {
+			best = i
+		}
+	}
+	if best < 0 {
+		return Profile{}, ErrProfileNotFound
+	}
+	return pl[best], nil
 }
