@@ -40,26 +40,20 @@ func main() {
 	}
 }
 
-// Códigos de saída do doctor. Viraram contrato com o hook pre-commit, que
-// roda em todos os repos: só exitMismatch bloqueia o commit.
 const (
-	exitMismatch = 1 // email do repo não bate com o perfil do alias
-	exitInternal = 2 // falha da própria ferramenta; o hook avisa e deixa passar
+	exitMismatch = 1
+	exitInternal = 2
 )
 
-// fail imprime o erro (uma vez só, aqui no main) e decide o código de saída.
-// No doctor, tudo que não é mismatch confirmado é falha interna. Os outros
-// comandos continuam saindo com 1.
 func fail(cmd string, err error) int {
 	if cmd == "doctor" && !errors.Is(err, doctor.ErrEmailMismatch) {
 		fmt.Fprintln(os.Stderr, "aviso: falha interna do doctor:", err)
 		return exitInternal
 	}
 	fmt.Fprintln(os.Stderr, "erro:", err)
-	return 1 // no doctor, 1 é sempre exitMismatch
+	return 1
 }
 
-// warn mostra um aviso no stderr. Aviso não bloqueia: o doctor sai com 0.
 func warn(format string, a ...any) {
 	fmt.Fprintln(os.Stderr, "aviso:", fmt.Sprintf(format, a...))
 }
