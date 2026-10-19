@@ -7,6 +7,7 @@ import (
 	"gitprof-go-cli/internal/clone"
 	"gitprof-go-cli/internal/doctor"
 	"gitprof-go-cli/internal/profile"
+	"gitprof-go-cli/internal/setup"
 	"gitprof-go-cli/internal/store"
 	"os"
 	"path/filepath"
@@ -14,6 +15,12 @@ import (
 )
 
 func main() {
+	if len(os.Args) >= 2 && os.Args[1] == "setup" {
+		if err := cmdSetup(os.Args[2:]); err != nil {
+			os.Exit(fail("setup", err))
+		}
+		return
+	}
 
 	if len(os.Args) < 3 || os.Args[1] != "profile" {
 		usage()
@@ -29,6 +36,10 @@ func main() {
 		err = cmdConfigSSH(os.Args[3:])
 	case "dir":
 		err = cmdDir(os.Args[3:])
+	case "key":
+		err = cmdKey(os.Args[3:])
+	case "user":
+		err = cmdUser(os.Args[3:])
 	case "clone":
 		err = cmdClone(os.Args[3:])
 	case "doctor":
@@ -61,7 +72,8 @@ func warn(format string, a ...any) {
 }
 
 func usage() {
-	fmt.Fprintln(os.Stderr, "uso: gitprof profile <add|list|ssh|dir|clone|doctor> <args>")
+	fmt.Fprintln(os.Stderr, "uso: gitprof profile <add|list|ssh|dir|key|user|clone|doctor> <args>")
+	fmt.Fprintln(os.Stderr, "     gitprof setup [--dry-run | --apply]")
 }
 
 func cmdAdd(args []string) error {
@@ -173,6 +185,118 @@ func cmdDir(args []string) error {
 		return err
 	}
 	fmt.Println("Pasta", abs, "salva em", path)
+	return nil
+}
+
+func cmdKey(args []string) error {
+	fs := flag.NewFlagSet("key", flag.ContinueOnError)
+	name := fs.String("name", "", "nome do perfil")
+	key := fs.String("key", "", "chave privada SSH do perfil")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	abs, err := profile.ExpandPath(*key, home)
+	if err != nil {
+		return fmt.Errorf("chave %q: %w", *key, profile.ErrInvalidKey)
+	}
+	if _, err := os.Stat(abs); err != nil {
+		warn("a chave %s não existe ainda; o gitprof não gera chaves", abs)
+	}
+
+	lista, err := store.Load()
+	if err != nil {
+		return err
+	}
+	profiles, err := profile.SetKey(abs, lista, *name)
+	if err != nil {
+		return err
+	}
+	path, err := store.Save(profiles)
+	if err != nil {
+		return err
+	}
+	fmt.Println("Chave", abs, "salva em", path)
+	return nil
+}
+
+func cmdUser(args []string) error {
+	fs := flag.NewFlagSet("user", flag.ContinueOnError)
+	name := fs.String("name", "", "nome do perfil")
+	user := fs.String("user", "", "user.name dos commits do perfil")
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	lista, err := store.Load()
+	if err != nil {
+		return err
+	}
+	profiles, err := profile.SetUserName(*user, lista, *name)
+	if err != nil {
+		return err
+	}
+	path, err := store.Save(profiles)
+	if err != nil {
+		return err
+	}
+	fmt.Println("user.name salvo em", path)
+	return nil
+}
+
+func cmdSetup(args []string) error {
+	fs := flag.NewFlagSet("setup", flag.ContinueOnError)
+	dryRun := fs.Bool("dry-run", false, "só mostra o que mudaria (padrão)")
+	apply := fs.Bool("apply", false, "aplica as mudanças, com backup .bak-gitprof")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *dryRun && *apply {
+		return errors.New("use --dry-run ou --apply, não os dois")
+	}
+
+	lista, err := store.Load()
+	if err != nil {
+		return err
+	}
+	if len(lista) == 0 {
+		return errors.New("nenhum perfil cadastrado, rode gitprof profile add")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	env := setup.Env{Home: home}
+
+	plan, err := setup.BuildPlan(lista, env)
+	if err != nil {
+		return err
+	}
+	for _, w := range plan.Warnings {
+		warn("%s", w)
+	}
+	if plan.Snippet != "" {
+		fmt.Fprint(os.Stderr, "\n"+plan.Snippet+"\n")
+	}
+	if plan.Empty() {
+		fmt.Println("Nada a mudar.")
+		return nil
+	}
+	setup.Render(os.Stdout, plan)
+	if !*apply {
+		fmt.Println("Nada foi alterado. Rode gitprof setup --apply para aplicar.")
+		return nil
+	}
+	if err := setup.Apply(plan, env); err != nil {
+		return err
+	}
+	fmt.Println("Pronto. Arquivos alterados ganharam backup com o sufixo", setup.BackupSuffix)
 	return nil
 }
 

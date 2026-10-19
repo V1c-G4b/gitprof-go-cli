@@ -204,3 +204,57 @@ func TestFindProfileByDirOrdemNaoImporta(t *testing.T) {
 		t.Fatalf("got (%q, %v), want trabalho", got.Name, err)
 	}
 }
+
+func TestSetKey(t *testing.T) {
+	tests := []struct {
+		nome    string
+		key     string
+		perfil  string
+		wantErr error
+	}{
+		{"ok", "/k/id_trab", "trabalho", nil},
+		{"vazia", "", "trabalho", ErrInvalidKey},
+		{"relativa", "k/id_trab", "trabalho", ErrInvalidKey},
+		{"perfil inexistente", "/k/id_trab", "freela", ErrProfileNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.nome, func(t *testing.T) {
+			lista := []Profile{{Name: "trabalho", Email: "trab@exemplo.com"}}
+			got, err := SetKey(filepath.FromSlash(tt.key), lista, tt.perfil)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("got err %v, want %v", err, tt.wantErr)
+			}
+			if tt.wantErr == nil && got[0].Key != filepath.FromSlash(tt.key) {
+				t.Fatalf("got key %q", got[0].Key)
+			}
+		})
+	}
+}
+
+func TestSetUserName(t *testing.T) {
+	tests := []struct {
+		nome    string
+		user    string
+		perfil  string
+		want    string
+		wantErr error
+	}{
+		{"ok", "Teste Trab", "trabalho", "Teste Trab", nil},
+		{"tira espacos", "  Teste Trab ", "trabalho", "Teste Trab", nil},
+		{"vazio", "  ", "trabalho", "", ErrInvalidUserName},
+		{"quebra de linha", "Teste\nTrab", "trabalho", "", ErrInvalidUserName},
+		{"perfil inexistente", "Teste", "freela", "", ErrProfileNotFound},
+	}
+	for _, tt := range tests {
+		t.Run(tt.nome, func(t *testing.T) {
+			lista := []Profile{{Name: "trabalho", Email: "trab@exemplo.com"}}
+			got, err := SetUserName(tt.user, lista, tt.perfil)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("got err %v, want %v", err, tt.wantErr)
+			}
+			if tt.wantErr == nil && got[0].UserName != tt.want {
+				t.Fatalf("got %q, want %q", got[0].UserName, tt.want)
+			}
+		})
+	}
+}

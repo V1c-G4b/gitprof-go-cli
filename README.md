@@ -42,7 +42,7 @@ gitprof profile ssh -name pessoal  -host github.com
 gitprof profile ssh -name trabalho -host github-trabalho
 ```
 
-O gitprof **não** edita o `~/.ssh/config`; o alias precisa existir lá, por exemplo:
+O `profile ssh` só grava o alias no perfil. O alias precisa existir no `~/.ssh/config`: o `gitprof setup` (veja abaixo) gera isso para você, ou você escreve na mão, por exemplo:
 
 ```sshconfig
 Host github-trabalho
@@ -60,13 +60,22 @@ gitprof profile dir -name trabalho -dir ~/dev/work
 
 Todo repo dentro de `~/dev/work` passa a ser do perfil `trabalho`. O `~` é expandido e o caminho é gravado absoluto e limpo (sem `/` no fim, sem `..`). Um caminho relativo é resolvido a partir da pasta atual.
 
-### 4. Listar
+### 4. Chave e user.name (opcional, usados pelo setup)
+
+```bash
+gitprof profile key  -name trabalho -key ~/.ssh/id_ed25519_trabalho
+gitprof profile user -name trabalho -user "Seu Nome"
+```
+
+A chave é a privada, que já precisa existir: o gitprof **não gera chaves** (só avisa se o arquivo não existir). O `~` é expandido e o caminho é gravado absoluto. O `user.name` é opcional; sem ele, os commits usam o `user.name` global.
+
+### 5. Listar
 
 ```bash
 gitprof profile list
 ```
 
-### 5. Clonar com o perfil certo
+### 6. Clonar com o perfil certo
 
 ```bash
 gitprof profile clone -name trabalho -url https://github.com/empresa/projeto.git
@@ -78,7 +87,7 @@ Aceita `git@github.com:...`, `https://github.com/...` e `http://github.com/...`.
 - o repo é clonado em `~/git/projeto`;
 - o `user.email` local do repo recebe o email do perfil.
 
-### 6. Conferir um repo
+### 7. Conferir um repo
 
 Dentro do repo:
 
@@ -115,11 +124,46 @@ O host vem do `origin` nos formatos `git@host:path`, `user@host:path` e `ssh://[
 
 Os códigos são um contrato com o hook: **só o 1 bloqueia o commit**. Quando o doctor não consegue dizer qual é o perfil certo (avisos, 0) ou quando ele mesmo falha (2), não bloqueia. Só bloqueia quando tem certeza de que está errado. Avisos e erros saem no stderr.
 
+## Setup automático
+
+Num computador novo, depois de criar os perfis (e de copiar as chaves SSH para `~/.ssh`):
+
+```bash
+gitprof setup            # só mostra o diff do que mudaria (padrão, igual a --dry-run)
+gitprof setup --apply    # aplica
+```
+
+O que o setup faz:
+
+| O quê | Onde | Como |
+|---|---|---|
+| Um bloco `Host` por perfil com alias diferente de `github.com` (`HostName github.com`, `User git`, `IdentityFile` da chave, `IdentitiesOnly yes`) | `~/.ssh/config.d/gitprof` | o arquivo inteiro é do gitprof e é regerado a cada execução, não edite à mão |
+| Uma única linha `Include ~/.ssh/config.d/gitprof` | topo do `~/.ssh/config` | se faltar, entra na primeira linha; se estiver duplicada ou depois de um `Host`/`Match` (onde valeria só para aquele bloco), vai para o topo. O resto do arquivo fica como está |
+| `user.email`, `user.name` (se o perfil tiver) e `core.sshCommand` (se o perfil tiver chave) | `~/.config/gitprof/<perfil>.gitconfig` | `git config --file` |
+| `includeIf "gitdir:<pasta>/".path` apontando para o arquivo do perfil, para cada perfil com pasta | gitconfig global | `git config --global` |
+| O hook `pre-commit` e o `core.hooksPath` | `~/.config/gitprof/hooks` | só se o `core.hooksPath` estiver vazio ou já for o do gitprof |
+
+Regras:
+
+- **Dry-run é o padrão.** Sem `--apply`, nada é escrito. `--dry-run` e `--apply` juntos dão erro.
+- **Backup:** antes de alterar um arquivo que já existe, o setup copia o original para `<arquivo>.bak-gitprof`. Se o backup já existir, ele é mantido, para guardar sempre o estado de antes do primeiro setup.
+- **Escrita atômica:** os arquivos que o setup gera são escritos num temporário na mesma pasta, trocados com `rename` e seguidos de `fsync` da pasta (onde o sistema suporta); o `git config` usa o próprio lock do git.
+- **Links simbólicos de arquivo:** se o `~/.ssh/config` ou o gitconfig global forem links (dotfiles, por exemplo), o setup escreve no alvo e o link continua link. O backup `.bak-gitprof` fica ao lado do alvo.
+- **Idempotente:** rodar de novo sem mudar os perfis dá `Nada a mudar.`
+- **Hook de terceiro:** se o `core.hooksPath` já aponta para outra pasta (husky, outro gerenciador...), o setup não mexe nele, avisa e mostra um trecho para colar no `pre-commit` dessa pasta.
+- **includeIf de terceiro:** se o gitconfig global já tiver um `includeIf` para a mesma pasta de um perfil apontando para outro arquivo, o setup avisa (o que vier por último no arquivo vence) e não mexe nele.
+- **Limpeza:** se um perfil perde a pasta, a chave ou o `user.name`, o setup remove a entrada correspondente que ele mesmo tinha criado.
+- Perfis com alias, mas sem chave, ficam fora do `~/.ssh/config.d/gitprof`, com um aviso.
+- **Links simbólicos:** o git compara o `gitdir` do `includeIf` com o caminho real do repo. Por isso o setup grava a pasta do perfil já resolvida (no macOS, `/var/...` vira `/private/var/...`; uma pasta de usuário que seja link vira o destino). Se a pasta ainda não existir, resolve a parte do caminho que já existe.
+- O gitconfig global é o que o git usa: `GIT_CONFIG_GLOBAL` se estiver definido, senão `~/.gitconfig`.
+
 ## Hook pre-commit
 
 O arquivo [`hooks/pre-commit`](hooks/pre-commit) roda o doctor antes de cada commit e, se existir, encadeia o hook local do repo (`.git/hooks/pre-commit`).
 
 ### Instalar (todos os repos)
+
+O `gitprof setup --apply` já faz isso. Na mão:
 
 ```bash
 mkdir -p ~/.config/gitprof/hooks
@@ -155,7 +199,10 @@ Em `profiles.json`, dentro do diretório de configuração do sistema (`os.UserC
 
 - Só GitHub é reconhecido no `clone`.
 - O doctor confere apenas o `user.email` (não o `user.name`).
-- O `profile ssh` não cria o alias no `~/.ssh/config`.
+- O `profile ssh` não cria o alias no `~/.ssh/config`; quem cria é o `gitprof setup`.
+- O setup não gera chaves SSH nem apaga o arquivo `<perfil>.gitconfig` de um perfil removido.
+- O `setup --apply` não é transacional: cada arquivo é trocado de forma atômica, mas se um passo falhar no meio, os passos anteriores já ficaram aplicados. Corrija a causa e rode de novo; como o setup é idempotente, ele só aplica o que falta.
+- O `.bak-gitprof` guarda só o estado de antes do primeiro setup. As execuções seguintes não sobrescrevem esse backup, então não há histórico das versões intermediárias.
 
 ## Desenvolvimento
 
@@ -171,6 +218,7 @@ main.go             comandos da CLI
 internal/profile    modelo e regras dos perfis
 internal/store      leitura e gravação do profiles.json
 internal/clone      reescrita de URL, clone e identidade
-internal/doctor     email e origin do repo, host do remote e comparação
+internal/doctor     email, origin e raiz do repo, cruzamento pasta × alias e comparação
+internal/setup      gitprof setup: ssh config, gitconfig por perfil, hook, diff e backup
 hooks/pre-commit    hook que chama o doctor
 ```

@@ -16,13 +16,17 @@ var (
 	ErrInvalidSSHHost  = errors.New("invalid ssh host")
 	ErrProfileNotFound = errors.New("profile not found")
 	ErrInvalidDir      = errors.New("invalid dir")
+	ErrInvalidKey      = errors.New("invalid key")
+	ErrInvalidUserName = errors.New("invalid user name")
 )
 
 type Profile struct {
-	Name    string `json:"name"`
-	Email   string `json:"email"`
-	SSHHost string `json:"ssh_host,omitempty"`
-	Dir     string `json:"dir,omitempty"`
+	Name     string `json:"name"`
+	Email    string `json:"email"`
+	SSHHost  string `json:"ssh_host,omitempty"`
+	Dir      string `json:"dir,omitempty"`
+	Key      string `json:"key,omitempty"`
+	UserName string `json:"user_name,omitempty"`
 }
 
 func New(name, email string) (Profile, error) {
@@ -150,4 +154,31 @@ func FindProfileByDir(path string, pl []Profile) (Profile, error) {
 		return Profile{}, ErrProfileNotFound
 	}
 	return pl[best], nil
+}
+
+func SetKey(key string, pl []Profile, name string) ([]Profile, error) {
+	if strings.TrimSpace(key) == "" || !filepath.IsAbs(key) {
+		return nil, ErrInvalidKey
+	}
+	for i := range pl {
+		if strings.EqualFold(pl[i].Name, name) {
+			pl[i].Key = filepath.Clean(key)
+			return pl, nil
+		}
+	}
+	return nil, ErrProfileNotFound
+}
+
+func SetUserName(userName string, pl []Profile, name string) ([]Profile, error) {
+	userName = strings.TrimSpace(userName)
+	if userName == "" || strings.ContainsAny(userName, "\n<>") {
+		return nil, ErrInvalidUserName
+	}
+	for i := range pl {
+		if strings.EqualFold(pl[i].Name, name) {
+			pl[i].UserName = userName
+			return pl, nil
+		}
+	}
+	return nil, ErrProfileNotFound
 }

@@ -1,0 +1,37 @@
+package setup
+
+const HookScript = `#!/bin/sh
+gitprof_bin=$(command -v gitprof 2>/dev/null || echo "$HOME/.local/bin/gitprof")
+if [ -x "$gitprof_bin" ]; then
+  "$gitprof_bin" profile doctor
+  rc=$?
+  case $rc in
+    0) ;;
+    1)
+      echo "gitprof: commit bloqueado. Ajuste o user.email do repo ou use --no-verify." >&2
+      exit 1
+      ;;
+    *)
+      echo "gitprof: o doctor falhou (código $rc), deixando o commit passar." >&2
+      ;;
+  esac
+else
+  echo "gitprof: binário não encontrado, pulando o doctor." >&2
+fi
+
+local_hook="$(git rev-parse --git-dir)/hooks/pre-commit"
+if [ -x "$local_hook" ] && ! [ "$local_hook" -ef "$0" ]; then
+  exec "$local_hook" "$@"
+fi
+exit 0
+`
+
+const HookSnippet = `gitprof_bin=$(command -v gitprof 2>/dev/null || echo "$HOME/.local/bin/gitprof")
+if [ -x "$gitprof_bin" ]; then
+  "$gitprof_bin" profile doctor
+  gitprof_rc=$?
+  if [ "$gitprof_rc" -eq 1 ]; then
+    exit 1
+  fi
+fi
+`
